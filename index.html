@@ -1,0 +1,198 @@
+<!doctype html>
+<html>
+<head>
+  <link rel="stylesheet" href="http://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.2.0/css/bootstrap.min.css">
+  <style>
+    body { padding: 10px; }
+    table { 
+      border-collapse: collapse; 
+      margin-top: 10px;
+    }
+    td {
+      border: solid 1px #ccc;
+      padding: 2px;
+    }
+    .disabled { color: #ccc; }
+  </style>
+</head>
+<body>
+<h1>Constrained list generator</h1>
+<h3>Alphabet</h3>
+<div>
+  <span>Enter comma separated alphabet: </span>
+  <input type="text" style="width: 400px;" data-bind="value: textAlphabet">
+</div>
+<h3>Constraints</h3>
+<div>
+  <div data-bind="foreach: constraints">
+    <div data-bind="css: { disabled: isDisabled }">
+      <select data-bind="options: $parent.alphabet, value: constraintType, optionsCaption: 'Choose...'"></select>
+      <span>is constrained to position(s):</span>
+      <input type="text" data-bind="value: textPositions">
+      <button type="button" class="btn btn-danger btn-xs" data-bind="click: remove">
+        <span class="glyphicon glyphicon-remove"></span> delete
+      </button>
+    </div>
+  </div>
+  <button type="button" class="btn btn-default" data-bind="click: addConstraint">
+    <span class="glyphicon glyphicon-plus"></span> Add constraint
+  </button>
+</div>
+<h3>Generated list</h3>
+<div>
+  <span>Number of records: </span><input type="text" style="width: 40px;" data-bind="value: listLength">
+  <button type="button" class="btn btn-success" data-bind="click: generateList"> Generate list </button>
+</div>
+<table data-bind="foreach: generatedList">
+  <tr data-bind="foreach: $data">
+    <td data-bind="text: $data"></td>
+  </tr>
+<table>
+</div>
+<script src="http://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+<script src="http://cdnjs.cloudflare.com/ajax/libs/knockout/3.1.0/knockout-min.js"></script>
+<script>
+(function($) {
+  $(document).ready(function() {
+    function ConstraintModel(parent) {
+      this.constraintType = ko.observable();
+      this.positions = ko.observableArray();
+      this.textPositions = ko.computed({
+        read: function() {
+          return this.positions().map(function(pos) { return pos + 1; }).join(', ');
+        },
+        write: function(value) {
+          var args = [0, this.positions().length]
+            .concat(value.split(',').map(function(item) { return parseInt(item, 10) - 1; }));
+          this.positions.splice.apply(this.positions, args);
+        },
+        owner: this
+      });
+
+      this.isDisabled = ko.computed(function() {
+        return parent.alphabet.indexOf(this.constraintType()) < 0;
+      }, this);
+
+      this.remove = function() {
+        parent.constraints.remove(this);
+      };
+    };
+
+    function ViewModel() {
+      this.alphabet = ko.observableArray();
+      this.optionsAlphabet = ko.observableArray(['']);
+      this.textAlphabet = ko.computed({
+        read: function() {
+          return this.alphabet().join(', ');
+        },
+        write: function(value) {
+          var args = value.split(',').map(function(item) { return $.trim(item); }); 
+          this.optionsAlphabet.splice.apply(this.optionsAlphabet, [1, this.alphabet().length].concat(args));
+          this.alphabet.splice.apply(this.alphabet, [0, this.alphabet().length].concat(args));
+        },
+        owner: this
+      });
+
+      this.constraints = ko.observableArray();
+      this.addConstraint = function() {
+        this.constraints.push(new ConstraintModel(this));
+      };
+
+      this.listLength = ko.observable();
+      this.generatedList = ko.observableArray();
+      this.generateList = function() {
+        try {
+          this.generatedList.removeAll();
+          var alphabet = this.alphabet();
+          var constraints = this.constraints();
+          var len = this.listLength();
+          for (var i = 0; i < len; i++) {
+            this.generatedList.push(generateLine(alphabet, constraints));
+          }
+        } catch(ex) {
+          alert(ex);
+        }
+      };
+    };
+
+    function generateLine(alphabet, constraints) {
+      var result = satisfyConstraints([], alphabet, constraints);
+      randomFill(result, alphabet);
+      return result;
+    }
+
+    function satisfyConstraints(result, alphabet, constraints, index) {
+      if (index >= constraints.length) {
+        return result;
+      }
+
+      var index = index || 0;
+      var constraint = constraints[index];
+      if (constraint.isDisabled()) {
+        return satisfyConstraints(result, alphabet, constraints, index + 1);
+      }
+
+      alphabet = alphabet.slice(0);
+      alphabet.splice(alphabet.indexOf(constraint.constraintType()), 1);
+      var positions = constraint.positions().slice(0);
+      while(positions.length) {
+        var pIndex;
+        if (positions.length === 1) {
+          pIndex = 0;
+        } else {
+          pIndex = randomIndex(positions.length);
+        }
+        var pos = positions[pIndex];
+        positions.splice(pIndex, 1);
+
+        if (result[pos] == null) {
+          var currentResult = result.slice(0);
+          currentResult[pos] = constraint.constraintType();
+          try {
+            return satisfyConstraints(currentResult, alphabet, constraints, index + 1);
+          } catch (ex) {
+            // constraints were not satisfiable, so continue
+          }
+        }
+      }
+
+      throw 'constraints were not satisfiable';
+    }
+
+    function randomIndex(length) {
+      return Math.floor(Math.random() * length);
+    }
+
+    function randomFill(result, alphabet) {
+      var len = alphabet.length;
+      alphabet = alphabet.slice(0);
+
+      // remove letters already used, and record free indices
+      var freeIndices = [];
+      for (var i = 0; i < len; i++) {
+        var item = result[i];
+        if (item != null) {
+          alphabet.splice(alphabet.indexOf(item), 1);
+        } else {
+          freeIndices.push(i);
+        }        
+      }
+
+      if (alphabet.length !== freeIndices.length) {
+        throw 'Remaining symbols do not match free indices';
+      }
+
+      alphabet.forEach(function(symbol) {
+        var index = randomIndex(freeIndices.length);
+        result[freeIndices[index]] = symbol;
+        freeIndices.splice(index, 1);
+      });
+    }
+
+    var viewModel = new ViewModel();
+    ko.applyBindings(viewModel);
+  })
+})(jQuery);
+</script>
+</body>
+</html>
