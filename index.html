@@ -13,6 +13,7 @@
       padding: 2px;
     }
     .disabled { color: #ccc; }
+    .gen-column { display: inline-block; width: 140px; }
   </style>
 </head>
 <body>
@@ -40,7 +41,15 @@
 </div>
 <h3>Generated list</h3>
 <div>
-  <span>Number of records: </span><input type="text" style="width: 40px;" data-bind="value: listLength">
+  <label><input type="checkbox" data-bind="checked: isColumnLock"><span> Columns locked to alphabet length</span></label>
+</div>
+<div data-bind="css: { disabled: isColumnLock }">
+  <span class="gen-column">Number of columns: </span><input type="text" style="width: 40px;" data-bind="value: columnLength, disable: isColumnLock">
+</div>
+<div>
+  <span class="gen-column">Number of records: </span><input type="text" style="width: 40px;" data-bind="value: listLength">
+</div>
+<div>
   <button type="button" class="btn btn-success" data-bind="click: generateList"> Generate list </button>
 </div>
 <table data-bind="foreach: generatedList">
@@ -98,6 +107,18 @@
         this.constraints.push(new ConstraintModel(this));
       };
 
+      this.isColumnLock = ko.observable(true);
+      this._columnLength = ko.observable();
+      this.columnLength = ko.computed({
+        read: function() {
+          return this.isColumnLock() ? this.alphabet().length : this._columnLength();
+        },
+        write: function(value) {
+          this._columnLength(value);
+        },
+        owner: this
+      });
+
       this.listLength = ko.observable();
       this.generatedList = ko.observableArray();
       this.generateList = function() {
@@ -107,87 +128,91 @@
           var constraints = this.constraints();
           var len = this.listLength();
           for (var i = 0; i < len; i++) {
-            this.generatedList.push(generateLine(alphabet, constraints));
+            this.generatedList.push(this.generateLine(alphabet, constraints));
           }
         } catch(ex) {
           alert(ex);
         }
       };
-    };
 
-    function generateLine(alphabet, constraints) {
-      var result = satisfyConstraints([], alphabet, constraints);
-      randomFill(result, alphabet);
-      return result;
-    }
-
-    function satisfyConstraints(result, alphabet, constraints, index) {
-      if (index >= constraints.length) {
+      this.generateLine = function(alphabet, constraints) {
+        var result = this.satisfyConstraints([], alphabet, constraints);
+        this.randomFill(result, alphabet);
         return result;
-      }
+      };
 
-      var index = index || 0;
-      var constraint = constraints[index];
-      if (constraint.isDisabled()) {
-        return satisfyConstraints(result, alphabet, constraints, index + 1);
-      }
-
-      alphabet = alphabet.slice(0);
-      alphabet.splice(alphabet.indexOf(constraint.constraintType()), 1);
-      var positions = constraint.positions().slice(0);
-      while(positions.length) {
-        var pIndex;
-        if (positions.length === 1) {
-          pIndex = 0;
-        } else {
-          pIndex = randomIndex(positions.length);
+      this.satisfyConstraints = function(result, alphabet, constraints, index) {
+        if (index >= constraints.length) {
+          return result;
         }
-        var pos = positions[pIndex];
-        positions.splice(pIndex, 1);
 
-        if (result[pos] == null) {
-          var currentResult = result.slice(0);
-          currentResult[pos] = constraint.constraintType();
-          try {
-            return satisfyConstraints(currentResult, alphabet, constraints, index + 1);
-          } catch (ex) {
-            // constraints were not satisfiable, so continue
+        var index = index || 0;
+        var constraint = constraints[index];
+        if (constraint.isDisabled()) {
+          return this.satisfyConstraints(result, alphabet, constraints, index + 1);
+        }
+
+        alphabet = alphabet.slice(0);
+        alphabet.splice(alphabet.indexOf(constraint.constraintType()), 1);
+        var positions = constraint.positions().slice(0);
+        while(positions.length) {
+          var pIndex;
+          if (positions.length === 1) {
+            pIndex = 0;
+          } else {
+            pIndex = this.randomIndex(positions.length);
+          }
+          var pos = positions[pIndex];
+          positions.splice(pIndex, 1);
+
+          if (result[pos] == null) {
+            var currentResult = result.slice(0);
+            currentResult[pos] = constraint.constraintType();
+            try {
+              return this.satisfyConstraints(currentResult, alphabet, constraints, index + 1);
+            } catch (ex) {
+              // constraints were not satisfiable, so continue
+            }
           }
         }
-      }
 
-      throw 'constraints were not satisfiable';
-    }
+        throw 'constraints were not satisfiable';
+      };
 
-    function randomIndex(length) {
-      return Math.floor(Math.random() * length);
-    }
+      this.randomIndex = function(length) {
+        return Math.floor(Math.random() * length);
+      };
 
-    function randomFill(result, alphabet) {
-      var len = alphabet.length;
-      alphabet = alphabet.slice(0);
+      this.randomFill = function(result, alphabet) {
+        var len = this.columnLength();
+        alphabet = alphabet.slice(0);
 
-      // remove letters already used, and record free indices
-      var freeIndices = [];
-      for (var i = 0; i < len; i++) {
-        var item = result[i];
-        if (item != null) {
-          alphabet.splice(alphabet.indexOf(item), 1);
-        } else {
-          freeIndices.push(i);
-        }        
-      }
+        // remove letters already used, and record free indices
+        var freeIndices = [];
+        for (var i = 0; i < len; i++) {
+          var item = result[i];
+          if (item != null) {
+            alphabet.splice(alphabet.indexOf(item), 1);
+          } else {
+            freeIndices.push(i);
+          }        
+        }
 
-      if (alphabet.length !== freeIndices.length) {
-        throw 'Remaining symbols do not match free indices';
-      }
+        if (this.isColumnLock() && alphabet.length !== freeIndices.length) {
+          throw 'Remaining symbols do not match free indices';
+        }
 
-      alphabet.forEach(function(symbol) {
-        var index = randomIndex(freeIndices.length);
-        result[freeIndices[index]] = symbol;
-        freeIndices.splice(index, 1);
-      });
-    }
+        while(alphabet.length) {
+          var alphaIndex = this.randomIndex(alphabet.length);
+          var symbol = alphabet[alphaIndex];
+          alphabet.splice(alphaIndex, 1);
+
+          var index = this.randomIndex(freeIndices.length);
+          result[freeIndices[index]] = symbol;
+          freeIndices.splice(index, 1);
+        }
+      };
+    };
 
     var viewModel = new ViewModel();
     ko.applyBindings(viewModel);
