@@ -25,7 +25,7 @@
 </div>
 <h3>Constraints</h3>
 <div>
-  <div data-bind="foreach: constraints">
+  <div data-bind="foreach: positionalConstraints">
     <div data-bind="css: { disabled: isDisabled }">
       <select data-bind="options: $parent.alphabet, value: constraintType, optionsCaption: 'Choose...'"></select>
       <span>is constrained to position(s):</span>
@@ -35,8 +35,26 @@
       </button>
     </div>
   </div>
-  <button type="button" class="btn btn-default" data-bind="click: addConstraint">
-    <span class="glyphicon glyphicon-plus"></span> Add constraint
+  <button type="button" class="btn btn-default" data-bind="click: addPositionalConstraint">
+    <span class="glyphicon glyphicon-plus"></span> Add positional constraint
+  </button>
+  <div data-bind="foreach: conditionalConstraints">
+    <div data-bind="css: { disabled: isDisabled }">
+      <span>When</span>
+      <select data-bind="options: $parent.alphabet, value: ifSymbol, optionsCaption: 'Choose...'"></select>
+      <span>is in position</span>
+      <input type="text" data-bind="value: ifPosition">
+      <span>then</span>
+      <select data-bind="options: $parent.alphabet, value: thenSymbol, optionsCaption: 'Choose...'"></select>
+      <span>is in position</span>
+      <input type="text" data-bind="value: thenPosition">
+      <button type="button" class="btn btn-danger btn-xs" data-bind="click: remove">
+        <span class="glyphicon glyphicon-remove"></span> delete
+      </button>
+    </div>
+  </div>
+  <button type="button" class="btn btn-default" data-bind="click: addConditionalConstraint">
+    <span class="glyphicon glyphicon-plus"></span> Add conditional constraint
   </button>
 </div>
 <h3>Generated list</h3>
@@ -63,7 +81,14 @@
 <script>
 (function($) {
   $(document).ready(function() {
-    function ConstraintModel(parent) {
+    function BaseConstraintModel(parent) {
+      if (parent) {
+        this.parent = parent;
+      }
+
+    }
+
+    function PositionalConstraintModel(parent) {
       this.constraintType = ko.observable();
       this.positions = ko.observableArray();
       this.textPositions = ko.computed({
@@ -83,9 +108,24 @@
       }, this);
 
       this.remove = function() {
-        parent.constraints.remove(this);
+        parent.positionalConstraints.remove(this);
       };
-    };
+    }
+
+    function ConditionalConstraintModel(parent) {
+      this.ifSymbol = ko.observable();
+      this.ifPosition = ko.observable();
+      this.thenSymbol = ko.observable();
+      this.thenPosition = ko.observable();
+
+      this.isDisabled = ko.computed(function() {
+        return parent.alphabet.indexOf(this.ifSymbol()) < 0 || parent.alphabet.indexOf(this.thenSymbol()) < 0;
+      }, this);
+
+      this.remove = function() {
+        parent.conditionalConstraints.remove(this);
+      };
+    }
 
     function ViewModel() {
       this.alphabet = ko.observableArray();
@@ -102,9 +142,14 @@
         owner: this
       });
 
-      this.constraints = ko.observableArray();
-      this.addConstraint = function() {
-        this.constraints.push(new ConstraintModel(this));
+      this.positionalConstraints = ko.observableArray();
+      this.addPositionalConstraint = function() {
+        this.positionalConstraints.push(new PositionalConstraintModel(this));
+      };
+
+      this.conditionalConstraints = ko.observableArray();
+      this.addConditionalConstraint = function() {
+        this.conditionalConstraints.push(new ConditionalConstraintModel(this));
       };
 
       this.isColumnLock = ko.observable(true);
@@ -121,35 +166,97 @@
 
       this.listLength = ko.observable();
       this.generatedList = ko.observableArray();
-      this.generateList = function() {
-        try {
-          this.generatedList.removeAll();
-          var alphabet = this.alphabet();
-          var constraints = this.constraints();
-          var len = this.listLength();
-          for (var i = 0; i < len; i++) {
-            this.generatedList.push(this.generateLine(alphabet, constraints));
-          }
-        } catch(ex) {
-          alert(ex);
-        }
-      };
 
-      this.generateLine = function(alphabet, constraints) {
-        var result = this.satisfyConstraints([], alphabet, constraints);
-        this.randomFill(result, alphabet);
+      this.shuffleAlphabet = function() {
+        var alphabet = this.alphabet.slice(0);
+        var result = [];
+        var index;
+        var len = this.columnLength();
+
+        while (result.length < len) {
+          index = this.randomIndex(alphabet.length);
+          result.push(alphabet[index]);
+          alphabet.splice(index, 1);
+        }
         return result;
       };
 
-      this.satisfyConstraints = function(result, alphabet, constraints, index) {
-        if (index >= constraints.length) {
+      this.generateList = function() {
+        try {
+          this.generatedList.removeAll();
+          var len = this.listLength();
+          for (var i = 0; i < len; i++) {
+            this.generatedList.push(this.generateLine(this.shuffleAlphabet()));
+          }
+        } catch(ex) {
+          alert(ex.stack);
+        }
+      };
+
+      this.generateLine = function(alphabet) {
+        var result;
+        do {
+          result = [];
+          if (this.positionalConstraints().length) {
+            this.satisfyPositionalConstraints(result, alphabet);
+          }
+          this.randomFill(result, alphabet);
+          if (this.conditionalConstraints().length) {
+            this.satisfyConditionalConstraints(result, alphabet);
+          }
+        } while(!this.validateConstraints(result));
+
+        return result;
+      };
+
+      this.validateConstraints = function(result) {
+        return this.validatePositionalConstraints(result) && this.validateConditionalConstraints(result);
+      };
+
+      this.validatePositionalConstraints = function(result) {
+        if (!this.positionalConstraints().length) {
+          return true;
+        }
+        return this.positionalConstraints().every(function(constraint) {
+          var rIndex = result.indexOf(constraint.constraintType());
+          
+          // exit early if the symbol does not appear in the result
+          if (rIndex < 0) {
+            return true;
+          }
+
+          // convert rIndex to 1-based index
+          rIndex++;
+
+          // return true if the 1-based index is found in the position list
+          return constraint.positions.indexOf(rIndex) >= 0;
+        });
+      };
+
+      this.validateConditionalConstraints = function(result) {
+        if (!this.conditionalConstraints().length) {
+          return true;
+        }
+        return this.conditionalConstraints().every(function(constraint) {
+          var rIndex = result.indexOf(constraint.ifSymbol());
+          if (rIndex + 1 !== constraint.ifPosition()) {
+            return true;
+          }
+
+          rIndex = result.indexOf(constraint.thenSymbol());
+          return rIndex + 1 === result.indexOf(constraint.thenPosition());
+        });
+      };
+
+      this.satisfyPositionalConstraints = function(result, alphabet, index) {
+        if (index >= this.positionalConstraints().length) {
           return result;
         }
 
         var index = index || 0;
-        var constraint = constraints[index];
+        var constraint = this.positionalConstraints[index];
         if (constraint.isDisabled()) {
-          return this.satisfyConstraints(result, alphabet, constraints, index + 1);
+          return this.satisfyPositionalConstraints(result, alphabet, index + 1);
         }
 
         alphabet = alphabet.slice(0);
@@ -169,7 +276,7 @@
             var currentResult = result.slice(0);
             currentResult[pos] = constraint.constraintType();
             try {
-              return this.satisfyConstraints(currentResult, alphabet, constraints, index + 1);
+              return this.satisfyPositionalConstraints(currentResult, alphabet, index + 1);
             } catch (ex) {
               // constraints were not satisfiable, so continue
             }
@@ -177,6 +284,19 @@
         }
 
         throw 'constraints were not satisfiable';
+      };
+
+      this.satisfyConditionalConstraints = function(result, alphabet) {
+        this.conditionalConstraints().forEach(function(constraint) {
+          var rIndex = result.indexOf(constraint.ifSymbol());
+          if (rIndex + 1 == constraint.ifPosition()) {
+            rIndex = result.indexOf(constraint.thenSymbol());
+            if (rIndex >= 0 && rIndex + 1 != constraint.thenPosition()) {
+              result[rIndex] = result[constraint.thenPosition() - 1];
+              result[constraint.thenPosition() - 1] = constraint.thenSymbol();
+            }
+          }
+        });
       };
 
       this.randomIndex = function(length) {
@@ -198,19 +318,16 @@
           }        
         }
 
-        if (this.isColumnLock() && alphabet.length !== freeIndices.length) {
+        if (alphabet.length !== freeIndices.length) {
           throw 'Remaining symbols do not match free indices';
         }
 
-        while(alphabet.length) {
-          var alphaIndex = this.randomIndex(alphabet.length);
-          var symbol = alphabet[alphaIndex];
-          alphabet.splice(alphaIndex, 1);
-
-          var index = this.randomIndex(freeIndices.length);
+        var self = this;
+        alphabet.forEach(function(symbol) {
+          var index = self.randomIndex(freeIndices.length);
           result[freeIndices[index]] = symbol;
           freeIndices.splice(index, 1);
-        }
+        });
       };
     };
 
