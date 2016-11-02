@@ -1,0 +1,241 @@
+<!doctype html>
+<html>
+<head>
+  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.2.0/css/bootstrap.min.css">
+  <style>
+    body { padding: 10px; }
+    table { 
+      border-collapse: collapse; 
+      margin-top: 10px;
+    }
+    td {
+      border: solid 1px #ccc;
+      padding: 2px;
+    }
+    .disabled { color: #ccc; }
+    .gen-column { display: inline-block; width: 140px; }
+  </style>
+</head>
+<body>
+<h1>Constrained list generator</h1>
+<h3>Alphabet</h3>
+<div>
+  <span>Enter comma separated alphabet: </span>
+  <input type="text" style="width: 400px;" data-bind="value: textAlphabet">
+</div>
+<h3>Vowel</h3>
+<div>
+  <span>Enter a vowel: </span>
+  <input type="text" style="width: 40px;" data-bind="value: vowel">
+</div>
+<h3>Constraints</h3>
+<div>
+  <div data-bind="foreach: positionalConstraints">
+    <div data-bind="css: { disabled: isDisabled }">
+      <select data-bind="options: $parent.alphabet, value: constraintType, optionsCaption: 'Choose...'"></select>
+      <span>is constrained to position(s):</span>
+      <input type="text" data-bind="value: textPositions">
+      <button type="button" class="btn btn-danger btn-xs" data-bind="click: remove">
+        <span class="glyphicon glyphicon-remove"></span> delete
+      </button>
+    </div>
+  </div>
+  <button type="button" class="btn btn-default" data-bind="click: addPositionalConstraint">
+    <span class="glyphicon glyphicon-plus"></span> Add positional constraint
+  </button>
+</div>
+<h3>Generated list</h3>
+<div>
+  <span class="gen-column">Number of records: </span><input type="text" style="width: 40px;" data-bind="value: listLength">
+</div>
+<div>
+  <button type="button" class="btn btn-success" data-bind="click: generateList"> Generate list </button>
+</div>
+<table data-bind="foreach: generatedList">
+  <tr data-bind="foreach: $data">
+    <td data-bind="text: $data"></td>
+  </tr>
+<table>
+</div>
+<script src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/knockout/3.1.0/knockout-min.js"></script>
+<script>
+(function($) {
+  $(document).ready(function() {
+
+    function randomIndex(len) {
+  return Math.floor(Math.random() * len);
+}
+
+function shuffle(_alphabet) {
+  var alphabet = _alphabet.slice(0);
+  var result = [];
+  while(alphabet.length) {
+    result.push(alphabet.splice(randomIndex(alphabet.length), 1)[0]);
+  }
+  return result;
+}
+
+function choosePosition(result, constraint, length) {
+  console.log(result, constraint, length);
+  var possiblePositions = [];
+  constraint.positions.forEach(function(pos) {
+    if (!result[pos] && (constraint.usedPositions[pos] || 0) < length / constraint.positions.length) {
+      possiblePositions.push(pos);
+    }
+  });
+
+  if (!possiblePositions.length) {
+    throw new error('No position avaialble');
+  }
+
+  var position = possiblePositions[randomIndex(possiblePositions.length)];
+  constraint.usedPositions[position] = (constraint.usedPositions[position] || 0) + 1;
+  return position;
+}
+
+function fillRest(result, alphabet) {
+  alphabet = alphabet.slice(0);
+  var i = 0;
+  while(alphabet.length) {
+    while (result[i]) { i++; };
+    result[i] = alphabet.splice(0, 1)[0];
+  }
+  return result;
+}
+
+// constraints: [{ letter: 'd', positions: [0, 2] }]
+function generate(result, _alphabet, constraints, length) {
+  var alphabet = _alphabet.slice(0);
+  constraints.forEach(function(constraint) {
+    var constraintIndex = alphabet.indexOf(constraint.letter);
+    if (constraintIndex < 0) {
+      throw new Error('Constraint ' + constraint.letter + ' not found in alphabet ' 
+        + JSON.stringify(alphabet, null, 2));
+    }
+    alphabet.splice(constraintIndex, 1);
+    result[choosePosition(result, constraint, length)] = constraint.letter;
+  });
+  return fillRest(result, alphabet);
+}
+
+function genLine(alphabet, vowel, constraints, length) {
+  var letters = generate(
+    [], 
+    shuffle(alphabet),  
+    constraints,
+    length
+  );
+
+  var result = [];
+  for (var i = 0; i < letters.length; i+=2) {
+    result.push(letters[i] + vowel + letters[i + 1]);
+  }
+  return result;
+}
+
+function generateAll(alphabet, vowel, _constraints, length) {
+  var constraints = _constraints.map(function(constraint) {
+      return {
+        letter: constraint.letter,
+        positions: constraint.positions.slice(0),
+        usedPositions: {}
+      };    
+  });
+
+  const result = []
+  for (var i = 0; i < length; i++) {
+    result.push(genLine(
+      alphabet,
+      vowel,
+      constraints,
+      length
+    ));
+  }
+  return result;
+}
+
+    function PositionalConstraintModel(parent) {
+      this.constraintType = ko.observable();
+      this.positions = ko.observableArray();
+      this.textPositions = ko.computed({
+        read: function() {
+          return this.positions().map(function(pos) { return pos + 1; }).join(', ');
+        },
+        write: function(value) {
+          var args = [0, this.positions().length]
+            .concat(value.split(',').map(function(item) { return parseInt(item, 10) - 1; }));
+          this.positions.splice.apply(this.positions, args);
+        },
+        owner: this
+      });
+
+      this.isDisabled = ko.computed(function() {
+        return parent.alphabet.indexOf(this.constraintType()) < 0;
+      }, this);
+
+      this.remove = function() {
+        parent.positionalConstraints.remove(this);
+      };
+
+      this.toJSON = function() {
+        return {
+          letter: this.constraintType(),
+          positions: this.positions()
+        };
+      };
+    }
+
+
+    function ViewModel() {
+      this.alphabet = ko.observableArray();
+      this.optionsAlphabet = ko.observableArray(['']);
+      this.textAlphabet = ko.computed({
+        read: function() {
+          return this.alphabet().join(', ');
+        },
+        write: function(value) {
+          var args = value.split(',').map(function(item) { return $.trim(item); }); 
+          this.optionsAlphabet.splice.apply(this.optionsAlphabet, [1, this.alphabet().length].concat(args));
+          this.alphabet.splice.apply(this.alphabet, [0, this.alphabet().length].concat(args));
+        },
+        owner: this
+      });
+
+      this.positionalConstraints = ko.observableArray();
+      this.addPositionalConstraint = function() {
+        this.positionalConstraints.push(new PositionalConstraintModel(this));
+      };
+
+      this.listLength = ko.observable();
+      this.generatedList = ko.observableArray();
+
+      this.vowel = ko.observable();
+
+      this.generateList = function() {
+        try {
+          this.generatedList.removeAll();
+          var len = this.listLength();
+          var self = this;
+          generateAll(
+            this.alphabet(),
+            this.vowel(),
+            this.positionalConstraints().map(function(constraint) { return constraint.toJSON(); }),
+            this.listLength()
+          ).forEach(function(line) {
+            self.generatedList.push(line);
+          });
+        } catch(ex) {
+          alert(ex.stack);
+        }
+      };
+
+    }
+
+    var viewModel = new ViewModel();
+    ko.applyBindings(viewModel);
+  })
+})(jQuery);
+</script>
+</body>
+</html>
