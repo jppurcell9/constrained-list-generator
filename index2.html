@@ -77,7 +77,6 @@ function shuffle(_alphabet) {
 }
 
 function choosePosition(result, constraint, length) {
-  console.log(result, constraint, length);
   var possiblePositions = [];
   constraint.positions.forEach(function(pos) {
     if (!result[pos] && (constraint.usedPositions[pos] || 0) < length / constraint.positions.length) {
