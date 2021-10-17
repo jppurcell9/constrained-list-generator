@@ -1,0 +1,53 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html>
+<head>
+<title>Experiment 5</title>
+</head>
+<body>
+<table><tr><td style="vertical-align: top;">
+<div id="alphabet">
+<div><label>Alphabet: <input /></label></div>
+<div id="consonants"><label>Consonants: <span></span></label></div>
+<div id="vowels"><label>Vowels: <span></span></label></div>
+</div>
+<p />
+<div>
+Pattern:<textarea id="patternText" style="width: 300px;"></textarea>
+</div>
+<p />
+</td>
+<td style="vertical-align: top; padding-left: 20px;">
+<div id="rules">
+</div>
+<div>
+<input id="alwaysOnsetTextbox" size="2" /> is always onset <button type="button" id="alwaysOnsetButton">add</button>
+</div>
+<div>
+<input id="alwaysCodaTextbox" size="2" /> is always coda <button type="button" id="alwaysCodaButton">add</button>
+</div>
+<div>
+When <input id="onsetVowelTextbox" size="2" /> is vowel, <input id="onsetSometimesTextbox" size="2" /> is onset <button type="button" id="onsetSometimesButton">add</button>
+</div>
+<div>
+When <input id="codaVowelTextbox" size="2" /> is vowel, <input id="codaSometimesTextbox" size="2" /> is coda <button type="button" id="codaSometimesButton">add</button>
+</div>
+<div>
+Exclude these words: <input id="excludeWordsTextbox" /> <button type="button" id="excludeWordsButton">add</button>
+</div>
+</td>
+</tr></table>
+<div>
+Lines: <input size="3" id="linesTextbox"/> <button type="button" id="generateButton">Generate</button>
+</div>
+<div id="results" style="border: solid 1px black; font-family: courier; margin: 5px; padding: 3px;">
+</div>
+<script type="text/javascript" src="utilities.js"></script>
+<script type="text/javascript" src="experiment5.js"></script>
+<script type="text/javascript">
+	(function() {
+		var experiment = new Jill.Experiment5();
+		experiment.init();
+	})();
+</script>
+</body>
+</html>
