@@ -198,7 +198,7 @@
         do {
           result = [];
           if (this.positionalConstraints().length) {
-            this.satisfyPositionalConstraints(result, alphabet);
+            result = this.satisfyPositionalConstraints(result, alphabet);
           }
           this.randomFill(result, alphabet);
           if (this.conditionalConstraints().length) {
@@ -226,10 +226,10 @@
           }
 
           // convert rIndex to 1-based index
-          rIndex++;
+          // rIndex++;
 
           // return true if the 1-based index is found in the position list
-          return constraint.positions.indexOf(rIndex) >= 0;
+          return constraint.positions().indexOf(rIndex) >= 0;
         });
       };
 
@@ -254,13 +254,13 @@
         }
 
         var index = index || 0;
-        var constraint = this.positionalConstraints[index];
+        var constraint = this.positionalConstraints()[index];
         if (constraint.isDisabled()) {
           return this.satisfyPositionalConstraints(result, alphabet, index + 1);
         }
 
-        alphabet = alphabet.slice(0);
-        alphabet.splice(alphabet.indexOf(constraint.constraintType()), 1);
+        var constrainedAlphabet = alphabet.slice(0);
+        constrainedAlphabet.splice(constrainedAlphabet.indexOf(constraint.constraintType()), 1);
         var positions = constraint.positions().slice(0);
         while(positions.length) {
           var pIndex;
